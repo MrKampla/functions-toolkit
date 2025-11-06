@@ -1,5 +1,5 @@
 {
-  "name": "@chainlink/functions-toolkit",
+  "name": "@MrKampla/functions-toolkit",
   "private": false,
   "version": "0.3.2",
   "description": "An NPM package with collection of functions that can be used for working with Chainlink Functions.",
