@@ -1,5 +1,4 @@
 import type { Overrides, Contract, providers } from 'ethers'
-import { Anvil } from '@viem/anvil'
 
 export enum Location {
   Inline = 0,
@@ -237,7 +236,6 @@ export type GetFunds = (
 ) => Promise<void>
 
 export type LocalFunctionsTestnet = {
-  anvil: Anvil
   adminWallet: {
     address: string
     privateKey: string
