@@ -1,0 +1,5 @@
+onlyBuiltDependencies:
+  - bcrypto
+  - eccrypto
+  - keccak
+  - secp256k1

@@ -5,7 +5,6 @@
   "description": "An NPM package with collection of functions that can be used for working with Chainlink Functions.",
   "main": "./dist/index.js",
   "scripts": {
-     "prepare": "pnpm run build",
     "build": "rimraf dist && tsc -P tsconfig.build.json && cpy src/simulateScript/deno-sandbox/**/* dist/simulateScript/deno-sandbox && pnpm run build:browser",
     "build:browser": "webpack && browserify dist/frontendSimulateScript.bundle.js -o dist/simulateScript.browser.js -t [ babelify --presets [ @babel/preset-env ] ] --standalone simulateScript && rm dist/frontendSimulateScript.bundle.js",
     "test": "NODE_OPTIONS=\"$NODE_OPTIONS --experimental-vm-modules\" jest",
@@ -73,6 +72,7 @@
     "proseWrap": "preserve"
   },
   "dependencies": {
+    "@ethersproject/abstract-provider": "^5.8.0",
     "@viem/anvil": "^0.0.10",
     "axios": "^1.4.0",
     "bcrypto": "^5.4.0",
