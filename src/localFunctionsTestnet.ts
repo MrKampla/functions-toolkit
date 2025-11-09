@@ -1,4 +1,6 @@
 import { Wallet, Contract, ContractFactory, utils, providers } from 'ethers'
+import { createPublicClient, http } from 'viem'
+import { anvil } from 'viem/chains'
 import cbor from 'cbor'
 
 import { simulateScript } from './simulateScript'
@@ -38,46 +40,245 @@ export const startLocalFunctionsTestnet = async (
 ): Promise<LocalFunctionsTestnet> => {
   // this is a hardcoded private key provided by anvil, defined here: https://book.getfoundry.sh/anvil/#getting-started
   const privateKey =
-    process.env.FUNCTIONS_TOOLKIT_PRIVATE_KEY || 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+    process.env.FUNCTIONS_TOOLKIT_PRIVATE_KEY ||
+    'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 
   const admin = new Wallet(privateKey, new providers.JsonRpcProvider(`http://127.0.0.1:${port}`))
+  const publicClient = createPublicClient({
+    chain: anvil,
+    transport: http(`http://127.0.0.1:${port}`),
+  })
 
   const contracts = await deployFunctionsOracle(admin)
 
-  contracts.functionsMockCoordinatorContract.on(
-    'OracleRequest',
-    (
-      requestId,
-      requestingContract,
-      requestInitiator,
-      subscriptionId,
-      subscriptionOwner,
-      data,
-      dataVersion,
-      flags,
-      callbackGasLimit,
-      commitment,
-    ) => {
-      const requestEvent: RequestEventData = {
-        requestId,
-        requestingContract,
-        requestInitiator,
-        subscriptionId,
-        subscriptionOwner,
-        data,
-        dataVersion,
-        flags,
-        callbackGasLimit,
-        commitment,
-      }
-      handleOracleRequest(
-        requestEvent,
-        contracts.functionsMockCoordinatorContract,
-        admin,
-        simulationConfigPath,
+  const unwatchOracleRequest = publicClient.watchContractEvent({
+    address: contracts.functionsMockCoordinatorContract.address as `0x${string}`,
+    abi: [
+      {
+        anonymous: false,
+        inputs: [
+          {
+            indexed: true,
+            internalType: 'bytes32',
+            name: 'requestId',
+            type: 'bytes32',
+          },
+          {
+            indexed: true,
+            internalType: 'address',
+            name: 'requestingContract',
+            type: 'address',
+          },
+          {
+            indexed: false,
+            internalType: 'address',
+            name: 'requestInitiator',
+            type: 'address',
+          },
+          {
+            indexed: false,
+            internalType: 'uint64',
+            name: 'subscriptionId',
+            type: 'uint64',
+          },
+          {
+            indexed: false,
+            internalType: 'address',
+            name: 'subscriptionOwner',
+            type: 'address',
+          },
+          {
+            indexed: false,
+            internalType: 'bytes',
+            name: 'data',
+            type: 'bytes',
+          },
+          {
+            indexed: false,
+            internalType: 'uint16',
+            name: 'dataVersion',
+            type: 'uint16',
+          },
+          {
+            indexed: false,
+            internalType: 'bytes32',
+            name: 'flags',
+            type: 'bytes32',
+          },
+          {
+            indexed: false,
+            internalType: 'uint64',
+            name: 'callbackGasLimit',
+            type: 'uint64',
+          },
+          {
+            components: [
+              {
+                internalType: 'bytes32',
+                name: 'requestId',
+                type: 'bytes32',
+              },
+              {
+                internalType: 'address',
+                name: 'coordinator',
+                type: 'address',
+              },
+              {
+                internalType: 'uint96',
+                name: 'estimatedTotalCostJuels',
+                type: 'uint96',
+              },
+              {
+                internalType: 'address',
+                name: 'client',
+                type: 'address',
+              },
+              {
+                internalType: 'uint64',
+                name: 'subscriptionId',
+                type: 'uint64',
+              },
+              {
+                internalType: 'uint32',
+                name: 'callbackGasLimit',
+                type: 'uint32',
+              },
+              {
+                internalType: 'uint72',
+                name: 'adminFee',
+                type: 'uint72',
+              },
+              {
+                internalType: 'uint72',
+                name: 'donFee',
+                type: 'uint72',
+              },
+              {
+                internalType: 'uint40',
+                name: 'gasOverheadBeforeCallback',
+                type: 'uint40',
+              },
+              {
+                internalType: 'uint40',
+                name: 'gasOverheadAfterCallback',
+                type: 'uint40',
+              },
+              {
+                internalType: 'uint32',
+                name: 'timeoutTimestamp',
+                type: 'uint32',
+              },
+            ],
+            indexed: false,
+            internalType: 'struct FunctionsResponse.Commitment',
+            name: 'commitment',
+            type: 'tuple',
+          },
+        ],
+        name: 'OracleRequest',
+        type: 'event',
+      },
+    ] as const,
+    eventName: 'OracleRequest',
+    onLogs: logs => {
+      return Promise.all(
+        logs.map(async log => {
+          const {
+            requestId,
+            requestingContract,
+            requestInitiator,
+            subscriptionId,
+            subscriptionOwner,
+            data,
+            dataVersion,
+            flags,
+            callbackGasLimit,
+            commitment,
+          } = log.args
+          if (
+            !requestId ||
+            !requestingContract ||
+            !requestInitiator ||
+            !subscriptionId ||
+            !subscriptionOwner ||
+            !data ||
+            !dataVersion ||
+            !flags ||
+            !callbackGasLimit ||
+            !commitment
+          ) {
+            return
+          }
+          console.log(`OracleRequest event received: ${requestId}`)
+          const requestEvent: RequestEventData = {
+            requestId,
+            requestingContract,
+            requestInitiator,
+            subscriptionId: Number(subscriptionId),
+            subscriptionOwner,
+            data,
+            dataVersion,
+            flags,
+            callbackGasLimit: Number(callbackGasLimit),
+            commitment: {
+              adminFee: commitment.adminFee,
+              donFee: commitment.donFee,
+              gasOverheadBeforeCallback: BigInt(commitment.gasOverheadBeforeCallback),
+              gasOverheadAfterCallback: BigInt(commitment.gasOverheadAfterCallback),
+              timeoutTimestamp: BigInt(commitment.timeoutTimestamp),
+              requestId,
+              coordinator: commitment.coordinator,
+              estimatedTotalCostJuels: commitment.estimatedTotalCostJuels,
+              client: commitment.client,
+              subscriptionId: Number(subscriptionId),
+              callbackGasLimit: BigInt(callbackGasLimit),
+            },
+          }
+          return await handleOracleRequest(
+            requestEvent,
+            contracts.functionsMockCoordinatorContract,
+            admin,
+            simulationConfigPath,
+          )
+        }),
       )
     },
-  )
+  })
+
+  // contracts.functionsMockCoordinatorContract.on(
+  //   'OracleRequest',
+  //   (
+  //     requestId,
+  //     requestingContract,
+  //     requestInitiator,
+  //     subscriptionId,
+  //     subscriptionOwner,
+  //     data,
+  //     dataVersion,
+  //     flags,
+  //     callbackGasLimit,
+  //     commitment,
+  //   ) => {
+  //     const requestEvent: RequestEventData = {
+  //       requestId,
+  //       requestingContract,
+  //       requestInitiator,
+  //       subscriptionId,
+  //       subscriptionOwner,
+  //       data,
+  //       dataVersion,
+  //       flags,
+  //       callbackGasLimit,
+  //       commitment,
+  //     }
+  //     handleOracleRequest(
+  //       requestEvent,
+  //       contracts.functionsMockCoordinatorContract,
+  //       admin,
+  //       simulationConfigPath,
+  //     )
+  //   },
+  // )
 
   const getFunds: GetFunds = async (address, { weiAmount, juelsAmount }) => {
     if (!juelsAmount) {
@@ -110,6 +311,7 @@ export const startLocalFunctionsTestnet = async (
 
   const close = async (): Promise<void> => {
     contracts.functionsMockCoordinatorContract.removeAllListeners('OracleRequest')
+    unwatchOracleRequest()
   }
 
   return {
