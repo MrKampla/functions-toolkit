@@ -1,5 +1,14 @@
-import { Wallet, Contract, ContractFactory, utils, providers } from 'ethers'
-import { createPublicClient, http } from 'viem'
+import { Wallet, ContractFactory, utils, providers } from 'ethers'
+import {
+  Account,
+  Chain,
+  createPublicClient,
+  createWalletClient,
+  http,
+  PublicClient,
+  Transport,
+  WalletClient,
+} from 'viem'
 import { anvil } from 'viem/chains'
 import cbor from 'cbor'
 
@@ -33,6 +42,7 @@ import type {
   FunctionsContracts,
   RequestEventData,
 } from './types'
+import { privateKeyToAccount } from 'viem/accounts'
 
 export const startLocalFunctionsTestnet = async (
   simulationConfigPath?: string,
@@ -43,12 +53,17 @@ export const startLocalFunctionsTestnet = async (
     process.env.FUNCTIONS_TOOLKIT_PRIVATE_KEY ||
     'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 
-  const admin = new Wallet(privateKey, new providers.JsonRpcProvider(`http://127.0.0.1:${port}`))
+  const adminWallet = createWalletClient({
+    account: privateKeyToAccount(`0x${privateKey}`),
+    chain: anvil,
+    transport: http(`http://127.0.0.1:${port}`),
+  })
   const publicClient = createPublicClient({
     chain: anvil,
     transport: http(`http://127.0.0.1:${port}`),
   })
 
+  const admin = new Wallet(privateKey, new providers.JsonRpcProvider(`http://127.0.0.1:${port}`))
   const contracts = await deployFunctionsOracle(admin)
 
   const unwatchOracleRequest = publicClient.watchContractEvent({
@@ -236,49 +251,15 @@ export const startLocalFunctionsTestnet = async (
           }
           return await handleOracleRequest(
             requestEvent,
-            contracts.functionsMockCoordinatorContract,
-            admin,
+            contracts.functionsMockCoordinatorContract.address as `0x${string}`,
+            adminWallet,
+            publicClient,
             simulationConfigPath,
           )
         }),
       )
     },
   })
-
-  // contracts.functionsMockCoordinatorContract.on(
-  //   'OracleRequest',
-  //   (
-  //     requestId,
-  //     requestingContract,
-  //     requestInitiator,
-  //     subscriptionId,
-  //     subscriptionOwner,
-  //     data,
-  //     dataVersion,
-  //     flags,
-  //     callbackGasLimit,
-  //     commitment,
-  //   ) => {
-  //     const requestEvent: RequestEventData = {
-  //       requestId,
-  //       requestingContract,
-  //       requestInitiator,
-  //       subscriptionId,
-  //       subscriptionOwner,
-  //       data,
-  //       dataVersion,
-  //       flags,
-  //       callbackGasLimit,
-  //       commitment,
-  //     }
-  //     handleOracleRequest(
-  //       requestEvent,
-  //       contracts.functionsMockCoordinatorContract,
-  //       admin,
-  //       simulationConfigPath,
-  //     )
-  //   },
-  // )
 
   const getFunds: GetFunds = async (address, { weiAmount, juelsAmount }) => {
     if (!juelsAmount) {
@@ -327,12 +308,12 @@ export const startLocalFunctionsTestnet = async (
 
 const handleOracleRequest = async (
   requestEventData: RequestEventData,
-  mockCoordinator: Contract,
-  admin: Wallet,
+  mockCoordinatorAddress: `0x${string}`,
+  adminWallet: WalletClient<Transport, Chain, Account>,
+  publicClient: PublicClient<Transport, Chain>,
   simulationConfigPath?: string,
 ) => {
   const response = await simulateDONExecution(requestEventData, simulationConfigPath)
-
   const errorHexstring = response.errorString
     ? '0x' + Buffer.from(response.errorString.toString()).toString('hex')
     : undefined
@@ -342,11 +323,28 @@ const handleOracleRequest = async (
     response.responseBytesHexstring,
     errorHexstring,
   )
-
-  const reportTx = await mockCoordinator
-    .connect(admin)
-    .callReport(encodedReport, { gasLimit: callReportGasLimit })
-  await reportTx.wait(1)
+  const reportTx = await adminWallet.writeContract({
+    address: mockCoordinatorAddress as `0x${string}`,
+    abi: [
+      {
+        inputs: [
+          {
+            internalType: 'bytes',
+            name: 'report',
+            type: 'bytes',
+          },
+        ],
+        name: 'callReport',
+        outputs: [],
+        stateMutability: 'nonpayable',
+        type: 'function',
+      },
+    ],
+    functionName: 'callReport',
+    args: [encodedReport as `0x${string}`],
+    gas: BigInt(callReportGasLimit),
+  })
+  await publicClient.waitForTransactionReceipt({ hash: reportTx })
 }
 
 const simulateDONExecution = async (
