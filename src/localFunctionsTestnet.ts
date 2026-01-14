@@ -195,69 +195,67 @@ export const startLocalFunctionsTestnet = async (
       },
     ] as const,
     eventName: 'OracleRequest',
-    onLogs: logs => {
-      return Promise.all(
-        logs.map(async log => {
-          const {
+    onLogs: async logs => {
+      for (const log of logs) {
+        const {
+          requestId,
+          requestingContract,
+          requestInitiator,
+          subscriptionId,
+          subscriptionOwner,
+          data,
+          dataVersion,
+          flags,
+          callbackGasLimit,
+          commitment,
+        } = log.args
+        if (
+          !requestId ||
+          !requestingContract ||
+          !requestInitiator ||
+          !subscriptionId ||
+          !subscriptionOwner ||
+          !data ||
+          !dataVersion ||
+          !flags ||
+          !callbackGasLimit ||
+          !commitment
+        ) {
+          continue
+        }
+        console.log(`OracleRequest event received: ${requestId}`)
+        const requestEvent: RequestEventData = {
+          requestId,
+          requestingContract,
+          requestInitiator,
+          subscriptionId: Number(subscriptionId),
+          subscriptionOwner,
+          data,
+          dataVersion,
+          flags,
+          callbackGasLimit: Number(callbackGasLimit),
+          commitment: {
+            adminFee: commitment.adminFee,
+            donFee: commitment.donFee,
+            gasOverheadBeforeCallback: BigInt(commitment.gasOverheadBeforeCallback),
+            gasOverheadAfterCallback: BigInt(commitment.gasOverheadAfterCallback),
+            timeoutTimestamp: BigInt(commitment.timeoutTimestamp),
             requestId,
-            requestingContract,
-            requestInitiator,
-            subscriptionId,
-            subscriptionOwner,
-            data,
-            dataVersion,
-            flags,
-            callbackGasLimit,
-            commitment,
-          } = log.args
-          if (
-            !requestId ||
-            !requestingContract ||
-            !requestInitiator ||
-            !subscriptionId ||
-            !subscriptionOwner ||
-            !data ||
-            !dataVersion ||
-            !flags ||
-            !callbackGasLimit ||
-            !commitment
-          ) {
-            return
-          }
-          console.log(`OracleRequest event received: ${requestId}`)
-          const requestEvent: RequestEventData = {
-            requestId,
-            requestingContract,
-            requestInitiator,
+            coordinator: commitment.coordinator,
+            estimatedTotalCostJuels: commitment.estimatedTotalCostJuels,
+            client: commitment.client,
             subscriptionId: Number(subscriptionId),
-            subscriptionOwner,
-            data,
-            dataVersion,
-            flags,
-            callbackGasLimit: Number(callbackGasLimit),
-            commitment: {
-              adminFee: commitment.adminFee,
-              donFee: commitment.donFee,
-              gasOverheadBeforeCallback: BigInt(commitment.gasOverheadBeforeCallback),
-              gasOverheadAfterCallback: BigInt(commitment.gasOverheadAfterCallback),
-              timeoutTimestamp: BigInt(commitment.timeoutTimestamp),
-              requestId,
-              coordinator: commitment.coordinator,
-              estimatedTotalCostJuels: commitment.estimatedTotalCostJuels,
-              client: commitment.client,
-              subscriptionId: Number(subscriptionId),
-              callbackGasLimit: BigInt(callbackGasLimit),
-            },
-          }
-          return await handleOracleRequest(
-            requestEvent,
-            contracts.functionsMockCoordinatorContract.address as `0x${string}`,
-            adminWallet,
-            publicClient,
-            simulationConfigPath,
-          )
-        }),
-      )
+            callbackGasLimit: BigInt(callbackGasLimit),
+          },
+        }
+        await handleOracleRequest(
+          requestEvent,
+          contracts.functionsMockCoordinatorContract.address as `0x${string}`,
+          adminWallet,
+          publicClient,
+          simulationConfigPath,
+        )
+      }
     },
   })
 
