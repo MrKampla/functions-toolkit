@@ -156,8 +156,8 @@ const startLocalFunctionsTestnet = async (simulationConfigPath, port = 8545) => 
             },
         ],
         eventName: 'OracleRequest',
-        onLogs: logs => {
-            return Promise.all(logs.map(async (log) => {
+        onLogs: async (logs) => {
+            for (const log of logs) {
                 const { requestId, requestingContract, requestInitiator, subscriptionId, subscriptionOwner, data, dataVersion, flags, callbackGasLimit, commitment, } = log.args;
                 if (!requestId ||
                     !requestingContract ||
@@ -169,7 +169,7 @@ const startLocalFunctionsTestnet = async (simulationConfigPath, port = 8545) => 
                     !flags ||
                     !callbackGasLimit ||
                     !commitment) {
-                    return;
+                    continue;
                 }
                 console.log(`OracleRequest event received: ${requestId}`);
                 const requestEvent = {
@@ -196,8 +196,8 @@ const startLocalFunctionsTestnet = async (simulationConfigPath, port = 8545) => 
                         callbackGasLimit: BigInt(callbackGasLimit),
                     },
                 };
-                return await handleOracleRequest(requestEvent, contracts.functionsMockCoordinatorContract.address, adminWallet, publicClient, simulationConfigPath);
-            }));
+                await handleOracleRequest(requestEvent, contracts.functionsMockCoordinatorContract.address, adminWallet, publicClient, simulationConfigPath);
+            }
         },
     });
     const getFunds = async (address, { weiAmount, juelsAmount }) => {
